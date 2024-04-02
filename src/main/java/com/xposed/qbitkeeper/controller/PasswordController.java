@@ -23,13 +23,13 @@ public class PasswordController {
     }
 
     @PostMapping("/passwords")
-    public ResponseEntity<Password> addPassword(@RequestParam(name = "user_id") long userId, @RequestBody Map<String, String> lookupObject){
+    public ResponseEntity<Password> addPassword(@RequestParam(name = "user_id") long userId, @RequestBody Map<String, String> lookupObject) throws Exception {
         Password password = passwordService.addPassword(lookupObject.get("website"), lookupObject.get("password"), userId);
         return new ResponseEntity<>(password, HttpStatus.CREATED);
     }
 
     @GetMapping("/passwords")
-    public ResponseEntity<String> getPassword(@RequestParam(name = "user_id") long userId, @RequestBody Map<String, String> lookupObject){
+    public ResponseEntity<String> getPassword(@RequestParam(name = "user_id") long userId, @RequestBody Map<String, String> lookupObject) throws Exception {
         Map<String, String> password = passwordService.getPassword(lookupObject.get("website"), userId);
         return ResponseEntity.ok(lookupObject.get("website")+" "+password.get(lookupObject.get("website")));
     }

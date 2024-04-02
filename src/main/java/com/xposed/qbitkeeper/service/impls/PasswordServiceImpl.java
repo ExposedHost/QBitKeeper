@@ -4,13 +4,21 @@ import com.xposed.qbitkeeper.entity.Password;
 import com.xposed.qbitkeeper.entity.User;
 import com.xposed.qbitkeeper.repo.PasswordRepository;
 import com.xposed.qbitkeeper.repo.UserRepository;
+import com.xposed.qbitkeeper.security.KeyStoreManager;
+import com.xposed.qbitkeeper.security.KyberAES;
 import com.xposed.qbitkeeper.service.PasswordService;
+import org.bouncycastle.jcajce.SecretKeyWithEncapsulation;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.pqc.jcajce.provider.BouncyCastlePQCProvider;
 import org.springframework.stereotype.Service;
 
+import java.security.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static com.xposed.qbitkeeper.security.KyberAES.*;
 
 @Service
 public class PasswordServiceImpl implements PasswordService {
@@ -24,7 +32,7 @@ public class PasswordServiceImpl implements PasswordService {
     }
 
     @Override
-    public Password addPassword(String website, String websitePassword, long userId) {
+    public Password addPassword(String website, String websitePassword, long userId) throws Exception {
         Password password = new Password();
         User user = userRepository.findById(userId).orElseThrow(()->new RuntimeException("Account does not exist"));
         List<Password> passwords = passwordRepository.findByUserId(userId);
@@ -35,17 +43,28 @@ public class PasswordServiceImpl implements PasswordService {
         }
         password.setUser(user);
         password.setWebsite(website);
-        password.setPassword(websitePassword);
+        Security.addProvider(new BouncyCastleProvider());
+        Security.addProvider(new BouncyCastlePQCProvider());
+        KeyPair keyPair = KyberAES.generateKeyPair();
+        SecretKeyWithEncapsulation initKeyWithEnc = generateSecretKeySender(keyPair.getPublic());
+        String encryptedPassword = encrypt(websitePassword, initKeyWithEnc.getEncoded());
+        try{
+            KeyStoreManager.storeSecretKeyForUser(user.getUserName(), initKeyWithEnc);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        password.setPassword(encryptedPassword);
         return passwordRepository.save(password);
     }
 
     @Override
-    public Map<String, String> getPassword(String website, long userId) {
+    public Map<String, String> getPassword(String website, long userId) throws Exception {
         List<Password> passwords = passwordRepository.findByUserId(userId);
         Map<String, String> resultPassword = new HashMap<>();
         for(Password password : passwords){
             if(password.getWebsite().equals(website)){
-                resultPassword.put(website, password.getPassword());
+                byte[] initKeyWithEnc = KeyStoreManager.getSecretKeyForUser(password.getUser().getUserName()).getEncoded();
+                resultPassword.put(website, decrypt(password.getPassword(), initKeyWithEnc));
             }
         }
         if (resultPassword.isEmpty()) {
